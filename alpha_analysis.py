@@ -85,6 +85,34 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=5):
     return fig_ssd, sessions_alpha
 
 
+def ssd_spec_ratios(raw_sessions_filtered, ssd):
+
+    fig_spec_ratios, axes = plt.subplots(1, 2, sharex=True, sharey=True)
+
+    data_agg = np.stack([raw_filtered.get_data() for raw_filtered
+                         in raw_sessions_filtered], axis=0)
+    spec_ratio_agg, _ = ssd.get_spectral_ratio(data_agg)
+
+    for sess_idx, raw_filtered in enumerate(raw_sessions_filtered):
+        epochs = mne.make_fixed_length_epochs(raw_filtered,
+                                              duration=2.5,
+                                              reject_by_annotation=False,
+                                              proj=False)
+
+        for data_epoch in epochs.__iter__():
+            spec_ratio_epochs, _ = ssd.get_spectral_ratio(data_epoch)
+            axes[sess_idx].plot(spec_ratio_epochs, color='orange',
+                                alpha=0.6, label='epoch-specific eigenvalues')
+        axes[sess_idx].plot(spec_ratio_agg, color='black',
+                            label='agg. eigenvalues')
+        axes[sess_idx].set_xlabel("Eigenvalue Index")
+        axes[sess_idx].set_ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
+        # axes[sess_idx].legend()
+        axes[sess_idx].axhline(1, linestyle='--')
+    
+    return fig_spec_ratios
+
+
 def fit_ssd(data, info):
     """Alpha-band Spatio-Spectral Decomposition (SSD) from raw data"""
     freqs_sig = 9, 14
@@ -150,9 +178,10 @@ def analysis(subj_id):
     for session_idx, raw_filtered in enumerate(raw_sessions_filtered):
         raw_filtered._data = filtered_data[session_idx].copy()
 
+    fig_spec_ratios = ssd_spec_ratios(raw_sessions_filtered, ssd)
     fig_ssd, sessions_alpha = ssd_alpha(raw_sessions_filtered, ssd)
 
-    return fig_alpha_topo, fig_ssd, sessions_alpha
+    return fig_alpha_topo, fig_ssd, sessions_alpha, fig_spec_ratios, subj_id
 
 
 if __name__ == '__main__':
@@ -166,13 +195,12 @@ if __name__ == '__main__':
 
     out = Parallel(n_jobs=n_jobs)(delayed(analysis)(subj_id) for subj_id
                                   in subj_ids)
-    fig_alpha_topo_list, fig_ssd_list, sessions_alpha_list = zip(*out)
+    #fig_alpha_topo_list, fig_ssd_list, sessions_alpha_list = zip(*out)
 
     report = Report()
-    for fig_alpha_topo, fig_ssd, subj_id in zip(fig_alpha_topo_list,
-                                                fig_ssd_list,
-                                                subj_ids):
+    for fig_alpha_topo, fig_ssd, _, fig_spec_ratios, subj_id in out:
         report.add_figure(fig_alpha_topo, title=subj_id, tags=('topo',))
         report.add_figure(fig_ssd, title=subj_id, tags=('ssd_psd',))
+        report.add_figure(fig_spec_ratios, title=subj_id, tags=('spec_ratios',))
     report.save('alpha_analysis.html', overwrite=True, open_browser=True)
     
