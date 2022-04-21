@@ -40,10 +40,12 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=5):
         axes[filt_idx, 0].set_title(f'SSD transform dim. #{filt_idx + 1}')
 
         session_alpha = dict()
+
         for sess_idx in range(len(raw_sessions_filtered)):
             raw_filtered = raw_sessions_filtered[sess_idx]
             color = colors[sess_idx]
 
+            # segment transformed data into epochs
             data_epochs = np.zeros((n_epochs, int(len(raw_filtered.times)
                                                   / n_epochs)))
             for epoch_idx, (tmin, tmax) in enumerate(zip(time_epochs[:-1],
@@ -63,16 +65,17 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=5):
 
             alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
             alpha_mean_pow = raw_filtered_psds[:, alpha_mask].mean(axis=1)
-            #alpha_max_mean = np.mean(alpha_max)
-            #alpha_max_std = np.std(alpha_max)
+            # alpha_max_mean = np.mean(alpha_max)
+            # alpha_max_std = np.std(alpha_max)
             avg_filtered_psd = np.mean(raw_filtered_psds, axis=0)
 
             session_alpha[sess_idx] = raw_filtered_psds[:, alpha_mask]
             label = f'session {sess_idx}'
-            #label = (r"session {0}" "\n" r"alpha mean: {1:.2e}" "\n"
-            #        r"alpha std: {2:.2e}").format(sess_idx + 1,
-            #                                    alpha_max_mean,
-            #                                    alpha_max_std)
+            # label = (r"session {0}" "\n" r"alpha mean: {1:.2e}" "\n"
+            #          r"alpha std: {2:.2e}").format(sess_idx + 1,
+            #                                        alpha_max_mean,
+            #                                        alpha_max_std)
+            # plot epoch-avg PSD
             axes[filt_idx, 1].plot(freqs, avg_filtered_psd,
                                    c=color, label=label)
             axes[filt_idx, 1].set_ylabel('power')
@@ -113,7 +116,7 @@ def analysis(subj_id):
         raw.load_data()
         raw.pick_types(meg=True, eeg=False, ref_meg=False)
         raw.filter(l_freq=1., h_freq=50)
-        #raw._data = zscore(raw._data, axis=1)
+        # raw._data = zscore(raw._data, axis=1)
         raw._data -= raw._data.mean()
         raw._data /= raw._data.std()
         raw.resample(sfreq=500)
@@ -130,7 +133,8 @@ def analysis(subj_id):
         # plot alpha topography
         alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
         avg_alpha_pow = raw_psds[:, alpha_mask].mean(axis=1)
-        im, _ = plot_topomap(avg_alpha_pow, raw.info, axes=axes[session_idx + 1],
+        im, _ = plot_topomap(avg_alpha_pow, raw.info,
+                             axes=axes[session_idx + 1],
                              show=False)
         plt.colorbar(im, ax=axes[session_idx + 1])
 
