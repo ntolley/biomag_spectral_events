@@ -1,4 +1,3 @@
-# %% import modules
 from os import listdir
 import os.path as op
 from glob import glob
@@ -118,7 +117,7 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
 
         n_epochs = epochs.get_data().shape[0]
         spec_ratio_epochs = np.zeros([n_epochs, n_ssd_dims])
-        for idx, data_epoch in enumerate(epochs.__iter__()):
+        for idx, data_epoch in enumerate(epochs):
             spec_ratio_epochs[idx, :], _ = ssd.get_spectral_ratio(data_epoch)
             # axes.plot(spec_ratio_epochs, color=colors[sess_idx],
             #           marker=',', linewidth=0., alpha=0.5)
@@ -147,8 +146,7 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
         max_mean = spec_ratio_stats['mean'][argmin - 1, filter_idx]
         max_lb = spec_ratio_stats['lb'][argmin - 1, filter_idx]
 
-        # XXX very conservative
-        if (min_ub < max_lb):
+        if (min_ub < max_mean and min_mean < max_lb):
             axes.vlines(filter_idx, 0.98, 1.02,
                         label=f'SSD component {filter_idx}')
             break
@@ -239,7 +237,7 @@ if __name__ == '__main__':
     subj_ids = list({fname[:8] for fname in listdir(data_dir)})
     print(subj_ids)
 
-    subj_ids = subj_ids[:20]
+    subj_ids = subj_ids[:6]
     # subj_ids = ['RASMDGZN']
 
     out = Parallel(n_jobs=n_jobs)(delayed(analysis)(subj_id) for subj_id
