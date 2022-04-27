@@ -13,20 +13,31 @@ from mne.time_frequency import psd_array_multitaper
 from mne.viz import plot_topomap
 from mne.report import Report
 
-mne.viz.set_browser_backend('qt')
+# mne.viz.set_browser_backend('qt')
 
-bads = dict(
-    DXFTLCJA=[[], ['MRT35-1609', 'MRT15-1609', 'MRP57-1609', 'MRP56-1609',
-                   'MRP23-1609', 'MRP22-1609', 'MRO24-1609', 'MLF67-1609',
-                   'MLF66-1609', 'MRP34-1609', 'MLT14-1609']],
-    BQBBKEBX=[[], ['MRT21-1609', 'MLT31-1609', 'MLT41-1609', 'MLT51-1609',
-                   'MLT21-1609', 'MLT16-1609', 'MLT11-1609', 'MLT22-1609',
-                   'MLT12-1609', 'MLT32-1609', 'MLT33-1609', 'MLT42-1609',
-                   'MLT43-1609', 'MRF14-1609', 'MRT34-1609', 'MRT27-1609']],
-    JBGAZIEO=[[], ['MLF25-1609']],
-    QGFMDSZY=[['MLP41-1609'], []],
-    ZDIAXRUW=[[], []]
-)
+
+def add_bad_labels(raw, subj_id):
+    """Label the the bad channels in a raw object"""
+
+    bads = dict(
+        DXFTLCJA=[[], ['MRT35-1609', 'MRT15-1609', 'MRP57-1609', 'MRP56-1609',
+                       'MRP23-1609', 'MRP22-1609', 'MRO24-1609', 'MLF67-1609',
+                       'MLF66-1609', 'MRP34-1609', 'MLT14-1609']],
+        BQBBKEBX=[[], ['MRT21-1609', 'MLT31-1609', 'MLT41-1609', 'MLT51-1609',
+                       'MLT21-1609', 'MLT16-1609', 'MLT11-1609', 'MLT22-1609',
+                       'MLT12-1609', 'MLT32-1609', 'MLT33-1609', 'MLT42-1609',
+                       'MLT43-1609', 'MRF14-1609', 'MRT34-1609', 'MRT27-1609']],
+        JBGAZIEO=[[], ['MLF25-1609']],
+        QGFMDSZY=[['MLP41-1609'], []],
+        ZDIAXRUW=[[], []]
+    )
+
+    # mark bad channels; maintain symmetry of channels across sessions
+    if subj_id in bads:
+        for bad_sess in bads[subj_id]:
+            for bad_ch in bad_sess:
+                if bad_ch not in raw.info['bads']:
+                    raw.info['bads'].append(bad_ch)
 
 
 def conf_int_mean(data, conf=0.95):
@@ -190,7 +201,7 @@ def fit_ssd(data, info):
     return data_filtered, ssd
 
 
-def analysis(subj_id, subj_bads):
+def analysis(subj_id):
     # read in both sessions belonging to a single subject
     raw_sessions = list()
     session_fnames = sorted(glob(op.join(data_dir, subj_id + '*')))
@@ -201,11 +212,7 @@ def analysis(subj_id, subj_bads):
     for session_idx, fname in enumerate(session_fnames):
         raw = mne.io.read_raw_ctf(fname, verbose=False)
         raw.load_data()
-        # mark bad channels; maintain symmetry of channels across sessions
-        for bad_sess_idx in range(2):
-            for bad_ch in bads[subj_id][bad_sess_idx]:
-                if bad_ch not in raw.info['bads']:
-                    raw.info['bads'].append(bad_ch)
+        add_bad_labels(raw, subj_id)  # modifies raw obj. in-place
         raw.pick_types(meg=True, eeg=False, ref_meg=False)
         raw.filter(l_freq=1., h_freq=50)
         # raw._data = zscore(raw._data, axis=1)
@@ -219,8 +226,7 @@ def analysis(subj_id, subj_bads):
                                                fmin=1., fmax=50.)
         # plot channel-mean psd
         chan_avg_psd = raw_psds.mean(axis=0)
-        axes[0].plot(freqs, chan_avg_psd, color=colors[session_idx],
-                     alpha=0.8)
+        axes[0].plot(freqs, chan_avg_psd, color=colors[session_idx], alpha=0.8)
         axes[0].set_ylabel('power')
         axes[0].set_xlabel('freq. (Hz)')
         # plot alpha topography
@@ -250,10 +256,11 @@ def analysis(subj_id, subj_bads):
 
 
 if __name__ == '__main__':
-    n_jobs = 6
-    n_subjs = 6
+    n_jobs = 1
+    n_subjs = 1
 
-    data_dir = '/home/ryan/Documents/datasets/MDD_ketamine_2022'
+    # data_dir = '/home/ryan/Documents/datasets/MDD_ketamine_2022'
+    data_dir = '/Volumes/THORPE/MDD_ketamine_2022'
     subj_ids = list({fname[:8] for fname in listdir(data_dir)})
     print(subj_ids)
 
