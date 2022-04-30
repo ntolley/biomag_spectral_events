@@ -3,7 +3,7 @@ import os.path as op
 from glob import glob
 
 import numpy as np
-from scipy.stats import zscore, norm
+from scipy.stats import zscore, norm, chi2
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 
@@ -135,28 +135,32 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
 
     for sess_idx, raw_filtered in enumerate(raw_sessions_filtered):
         epochs = mne.make_fixed_length_epochs(raw_filtered,
-                                              duration=2.5,
+                                              duration=250,  # 2.5
                                               reject_by_annotation=False,
                                               proj=False)
 
         n_epochs = epochs.get_data().shape[0]
+        print(n_epochs)
         spec_ratio_epochs = np.zeros([n_epochs, n_ssd_dims])
         for idx, data_epoch in enumerate(epochs):
             spec_ratio_epochs[idx, :], _ = ssd.get_spectral_ratio(data_epoch)
             # axes.plot(spec_ratio_epochs, color=colors[sess_idx],
             #           marker=',', linewidth=0., alpha=0.5)
 
-        sess_mean, lb, ub = conf_int_mean(spec_ratio_epochs, conf=0.95)
-        spec_ratio_stats['mean'][sess_idx, :] = sess_mean
-        spec_ratio_stats['lb'][sess_idx, :] = lb
-        spec_ratio_stats['ub'][sess_idx, :] = ub
+        # sess_mean, lb, ub = conf_int_mean(spec_ratio_epochs, conf=0.95)
+        # spec_ratio_stats['mean'][sess_idx, :] = sess_mean
+        # spec_ratio_stats['lb'][sess_idx, :] = lb
+        # spec_ratio_stats['ub'][sess_idx, :] = ub
+        sess_mean = spec_ratio_epochs[0, :]
+        chi_2_stat = np.sum(((sess_mean - spec_ratio_agg) ** 2)
+                             / spec_ratio_agg)
 
         axes.plot(sess_mean, color=colors[sess_idx],
-                  linewidth=0.5, label=f'session {sess_idx + 1}')
-        axes.fill_between(x=range(n_ssd_dims), y1=lb, y2=ub, linewidth=0,
-                          color=colors[sess_idx], alpha=0.5)
+                  linewidth=2, label=f'session {sess_idx + 1}')
+        # axes.fill_between(x=range(n_ssd_dims), y1=lb, y2=ub, linewidth=0,
+        #                   color=colors[sess_idx], alpha=0.5)
 
-    axes.plot(spec_ratio_agg, color='black', linewidth=0.5, linestyle='--',
+    axes.plot(spec_ratio_agg, color='black', linewidth=2, linestyle='--',
               alpha=0.7, label='aggregate')
     axes.set_xlabel("Eigenvalue Index")
     axes.set_ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
