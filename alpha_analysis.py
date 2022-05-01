@@ -6,6 +6,8 @@ import numpy as np
 from scipy.stats import zscore, norm, chi2
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
+import seaborn as sns
+sns.set()
 
 import mne
 from mne.decoding import SSD
@@ -49,7 +51,7 @@ def conf_int_mean(data, conf=0.95):
     return mean, lb, ub
 
 
-def ssd_alpha(raw_sessions_filtered, ssd, num_filters=5):
+def ssd_alpha(raw_sessions_filtered, ssd, num_filters=3):
 
     fig_ssd, axes = plt.subplots(num_filters, 2, figsize=[10, 10],
                                  sharey='col')
@@ -114,73 +116,52 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=5):
             axes[filt_idx, 1].set_ylabel('power')
             axes[filt_idx, 1].set_xlabel('freq. (Hz)')
             axes[filt_idx, 1].legend()
-        sessions_alpha.append(session_alpha)
+        # sessions_alpha.append(session_alpha)  # speed up
     return fig_ssd, sessions_alpha
 
 
 def ssd_spec_ratios(raw_sessions_filtered, ssd):
 
     n_ssd_dims = ssd.patterns_.shape[0]
-    fig_spec_ratios, axes = plt.subplots(1)
+    fig_spec_ratios, axes = plt.subplots(1, 2)
     colors = ['grey', 'orange']
 
     data_agg = np.stack([raw_filtered.get_data() for raw_filtered
                          in raw_sessions_filtered], axis=0)
     spec_ratio_agg, _ = ssd.get_spectral_ratio(data_agg)
 
-    # store stats of comparison across sessions
-    spec_ratio_stats = {'mean': np.zeros([2, n_ssd_dims]),
-                        'lb': np.zeros([2, n_ssd_dims]),
-                        'ub': np.zeros([2, n_ssd_dims])}
-
     for sess_idx, raw_filtered in enumerate(raw_sessions_filtered):
-        epochs = mne.make_fixed_length_epochs(raw_filtered,
-                                              duration=250,  # 2.5
-                                              reject_by_annotation=False,
-                                              proj=False)
+        data = raw_filtered.get_data()
+        spec_ratios_sess, _ = ssd.get_spectral_ratio(data)
+        spec_ratios_diff = spec_ratios_sess - spec_ratio_agg
 
-        n_epochs = epochs.get_data().shape[0]
-        print(n_epochs)
-        spec_ratio_epochs = np.zeros([n_epochs, n_ssd_dims])
-        for idx, data_epoch in enumerate(epochs):
-            spec_ratio_epochs[idx, :], _ = ssd.get_spectral_ratio(data_epoch)
-            # axes.plot(spec_ratio_epochs, color=colors[sess_idx],
-            #           marker=',', linewidth=0., alpha=0.5)
+        df = len(spec_ratios_diff) - 1
+        loc = spec_ratios_diff.mean()
+        scale = spec_ratios_diff.std()
+        chi_2_stat = np.sum((spec_ratios_diff ** 2) / spec_ratio_agg)
+        if chi2.cdf(chi_2_stat, df=df, loc=loc, scale=scale) > 0.95:
+            label = f'session {sess_idx + 1}*'
+        else:
+            label = f'session {sess_idx + 1}'
+        axes[0].plot(spec_ratios_sess, color=colors[sess_idx],
+                     linewidth=2, alpha=0.8, label=label)
+        axes[1].hist(spec_ratios_diff, density=True,
+                     histtype='stepfilled', color=colors[sess_idx], alpha=0.8)
 
-        # sess_mean, lb, ub = conf_int_mean(spec_ratio_epochs, conf=0.95)
-        # spec_ratio_stats['mean'][sess_idx, :] = sess_mean
-        # spec_ratio_stats['lb'][sess_idx, :] = lb
-        # spec_ratio_stats['ub'][sess_idx, :] = ub
-        sess_mean = spec_ratio_epochs[0, :]
-        chi_2_stat = np.sum(((sess_mean - spec_ratio_agg) ** 2)
-                             / spec_ratio_agg)
+        # plot theoretical normal distribution of sess-agg spectral ratios
+        norm_dist = norm(loc=loc, scale=scale)
+        norm_bounds = norm_dist.ppf([0.001, 0.999])
+        norm_x = np.linspace(norm_bounds[0], norm_bounds[1], num=100)
+        axes[1].plot(norm_x, norm_dist.pdf(norm_x), color=colors[sess_idx],
+                     lw=2, alpha=0.95)
 
-        axes.plot(sess_mean, color=colors[sess_idx],
-                  linewidth=2, label=f'session {sess_idx + 1}')
-        # axes.fill_between(x=range(n_ssd_dims), y1=lb, y2=ub, linewidth=0,
-        #                   color=colors[sess_idx], alpha=0.5)
+    axes[0].plot(spec_ratio_agg, color='black', linewidth=2, linestyle='--',
+                 alpha=0.7, label='aggregate')
+    axes[0].set_xlabel("Eigenvalue Index")
+    axes[0].set_ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 
-    axes.plot(spec_ratio_agg, color='black', linewidth=2, linestyle='--',
-              alpha=0.7, label='aggregate')
-    axes.set_xlabel("Eigenvalue Index")
-    axes.set_ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
-
-    # find highest SSD component where the mean spectral ratio is different
-    sess_argmin = spec_ratio_stats['mean'].argmin(axis=0)
-    for filter_idx in range(n_ssd_dims):
-        argmin = sess_argmin[filter_idx]
-        min_mean = spec_ratio_stats['mean'][argmin, filter_idx]
-        min_ub = spec_ratio_stats['ub'][argmin, filter_idx]
-        max_mean = spec_ratio_stats['mean'][argmin - 1, filter_idx]
-        max_lb = spec_ratio_stats['lb'][argmin - 1, filter_idx]
-
-        if (min_ub < max_mean and min_mean < max_lb):
-            axes.vlines(filter_idx, 0.98, 1.02,
-                        label=f'SSD component {filter_idx}')
-            break
-
-    axes.legend()
-    axes.axhline(1, linestyle='--')
+    axes[0].legend()
+    axes[0].axhline(1, color='k', linestyle=':')
 
     return fig_spec_ratios
 
@@ -208,15 +189,16 @@ def fit_ssd(data, info):
 def analysis(subj_id):
     # read in both sessions belonging to a single subject
     raw_sessions = list()
+    alpha_sess = list()
     session_fnames = sorted(glob(op.join(data_dir, subj_id + '*')))
 
-    fig_alpha_topo, axes = plt.subplots(1, 3, figsize=(9, 3))
+    fig_alpha_topo, axes = plt.subplots(1, 4)
     colors = ['grey', 'orange']
 
     for session_idx, fname in enumerate(session_fnames):
         raw = mne.io.read_raw_ctf(fname, verbose=False)
         raw.load_data()
-        add_bad_labels(raw, subj_id)  # modifies raw obj. in-place
+        add_bad_labels(raw, subj_id)  # modifies Raw object in-place
         raw.pick_types(meg=True, eeg=False, ref_meg=False)
         raw.filter(l_freq=1., h_freq=50)
         # raw._data = zscore(raw._data, axis=1)
@@ -230,18 +212,24 @@ def analysis(subj_id):
                                                fmin=1., fmax=50.)
         # plot channel-mean psd
         chan_avg_psd = raw_psds.mean(axis=0)
-        axes[0].plot(freqs, chan_avg_psd, color=colors[session_idx], alpha=0.8)
-        axes[0].set_ylabel('power')
+        axes[0].plot(freqs, np.log(chan_avg_psd), color=colors[session_idx], alpha=0.8)
+        axes[0].set_ylabel('log power')
         axes[0].set_xlabel('freq. (Hz)')
         # plot alpha topography
         alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
         avg_alpha_pow = raw_psds[:, alpha_mask].mean(axis=1)
-        im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=70,
+        im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=80,
                              axes=axes[session_idx + 1],
                              show=False)
         plt.colorbar(im, ax=axes[session_idx + 1])
 
+        alpha_sess.append(avg_alpha_pow)
         raw_sessions.append(raw)
+    
+    # plot alpha topography diff between sessions
+    alpha_sess_diff = alpha_sess[1] - alpha_sess[0]
+    im, _ = plot_topomap(alpha_sess_diff, raw.info, axes=axes[3], show=False)
+    plt.colorbar(im, ax=axes[3])
 
     # concatenate data and compute a single SSD filter that is applied to both
     # sessions
@@ -260,11 +248,11 @@ def analysis(subj_id):
 
 
 if __name__ == '__main__':
-    n_jobs = 1
-    n_subjs = 1
+    n_jobs = 5
+    n_subjs = 5
 
-    # data_dir = '/home/ryan/Documents/datasets/MDD_ketamine_2022'
-    data_dir = '/Volumes/THORPE/MDD_ketamine_2022'
+    data_dir = '/home/ryan/Documents/datasets/MDD_ketamine_2022'
+    # data_dir = '/Volumes/THORPE/MDD_ketamine_2022'
     subj_ids = list({fname[:8] for fname in listdir(data_dir)})
     print(subj_ids)
 
