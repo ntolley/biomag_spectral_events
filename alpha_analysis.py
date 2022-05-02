@@ -100,11 +100,11 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=3):
             raw_filtered_psds, freqs = psd_array_multitaper(
                 data_epochs,
                 raw_filtered.info['sfreq'],
-                fmin=5., fmax=50.
+                fmin=3., fmax=55.
                 )
 
             # alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
-            alpha_mask = np.logical_and(freqs >= 15, freqs <= 29)  # beta
+            alpha_mask = np.logical_and(freqs >= 35, freqs <= 45)  # gamma
             alpha_mean_pow = raw_filtered_psds[:, alpha_mask].mean(axis=1)
             # alpha_max_mean = np.mean(alpha_max)
             # alpha_max_std = np.std(alpha_max)
@@ -182,8 +182,10 @@ def fit_ssd(data, info):
     """Alpha-band Spatio-Spectral Decomposition (SSD) from raw data"""
     # freqs_sig = 9, 14  # alpha
     # freqs_noise = 8, 15  # alpha
-    freqs_sig = 15, 29  # beta
-    freqs_noise = 14, 30  # beta
+    # freqs_sig = 15, 29  # beta
+    # freqs_noise = 14, 30  # beta
+    freqs_sig = 35, 45  # gamma
+    freqs_noise = 30, 50  # gamma
 
     ssd = SSD(info=info,
               reg='oas',
@@ -214,7 +216,7 @@ def analysis(subj_id):
         raw.load_data()
         add_bad_labels(raw, subj_id)  # modifies Raw object in-place
         raw.pick_types(meg=True, eeg=False, ref_meg=False)
-        raw.filter(l_freq=5., h_freq=50)
+        raw.filter(l_freq=3., h_freq=55)
         # raw._data = zscore(raw._data, axis=1)
         raw._data -= raw._data.mean()
         raw._data /= raw._data.std()
@@ -223,7 +225,7 @@ def analysis(subj_id):
         # compute raw PSD
         raw_psds, freqs = psd_array_multitaper(raw.get_data(),
                                                raw.info['sfreq'],
-                                               fmin=3., fmax=50.)
+                                               fmin=3., fmax=55.)
         # plot channel-mean psd
         chan_avg_psd = raw_psds.mean(axis=0)
         axes[0].plot(freqs, np.log(chan_avg_psd), color=colors[session_idx], alpha=0.8)
@@ -231,7 +233,7 @@ def analysis(subj_id):
         axes[0].set_xlabel('freq. (Hz)')
         # plot alpha topography
         # alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
-        alpha_mask = np.logical_and(freqs >= 15, freqs <= 29)  # beta
+        alpha_mask = np.logical_and(freqs >= 35, freqs <= 45)  # gamma
         avg_alpha_pow = raw_psds[:, alpha_mask].mean(axis=1)
         im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=20,
                              axes=axes[session_idx + 1],
