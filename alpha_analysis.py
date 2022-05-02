@@ -4,6 +4,7 @@ from glob import glob
 
 import numpy as np
 from scipy.stats import zscore, norm, chi2
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import seaborn as sns
@@ -22,16 +23,19 @@ def add_bad_labels(raw, subj_id):
     """Label the the bad channels in a raw object"""
 
     bads = dict(
-        DXFTLCJA=[[], ['MRT35-1609', 'MRT15-1609', 'MRP57-1609', 'MRP56-1609',
-                       'MRP23-1609', 'MRP22-1609', 'MRO24-1609', 'MLF67-1609',
-                       'MLF66-1609', 'MRP34-1609', 'MLT14-1609']],
-        BQBBKEBX=[[], ['MRT21-1609', 'MLT31-1609', 'MLT41-1609', 'MLT51-1609',
-                       'MLT21-1609', 'MLT16-1609', 'MLT11-1609', 'MLT22-1609',
-                       'MLT12-1609', 'MLT32-1609', 'MLT33-1609', 'MLT42-1609',
-                       'MLT43-1609', 'MRF14-1609', 'MRT34-1609', 'MRT27-1609']],
+        DXFTLCJA=[[], ['MLF67-1609', 'MLF66-1609', 'MLT14-1609', 'MRO24-1609',
+                       'MRP23-1609', 'MRP22-1609', 'MRP34-1609', 'MRT35-1609',
+                       'MRT15-1609', 'MRP57-1609', 'MRP56-1609', 'MRO14-1609',
+                       'MLT44-1609', 'MRO34-1609']],
+        BQBBKEBX=[[], ['MLF67-1609', 'MLF66-1609', 'MLT14-1609', 'MRO24-1609',
+                       'MRP23-1609', 'MRP22-1609', 'MRP34-1609', 'MRT35-1609',
+                       'MRT15-1609', 'MRP57-1609', 'MRP56-1609', 'MRO14-1609',
+                       'MLT44-1609']],
         JBGAZIEO=[[], ['MLF25-1609']],
         QGFMDSZY=[['MLP41-1609'], []],
-        ZDIAXRUW=[[], []]
+        ZDIAXRUW=[['MRF61-1609', 'MRC62-1609', 'MRC15-1609', 'MRO41-1609',
+                   'MRO53-1609', 'MRT41-1609', 'MRT42-1609', 'MRT43-1609'],
+                  ['MRC55-1609']]
     )
 
     # mark bad channels; maintain symmetry of channels across sessions
@@ -54,7 +58,7 @@ def conf_int_mean(data, conf=0.95):
 def ssd_alpha(raw_sessions_filtered, ssd, num_filters=3):
 
     fig_ssd, axes = plt.subplots(num_filters, 2, figsize=[10, 10],
-                                 sharey='col')
+                                 constrained_layout=True, sharey='col')
     colors = ['grey', 'orange']
     n_epochs = 100
     dt = 1/raw_sessions_filtered[0].info['sfreq']
@@ -72,8 +76,8 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=3):
         # https://mne.tools/stable/generated/mne.decoding.SSD.html#mne.decoding.SSD.get_spectral_ratio  # noqa
         im, _ = plot_topomap(ssd.patterns_[filt_idx], ssd.info,
                              axes=axes[filt_idx, 0], show=False)
-        plt.colorbar(im, ax=axes[filt_idx, 0])
-        axes[filt_idx, 0].set_title(f'SSD transform dim. #{filt_idx + 1}')
+        plt.colorbar(im, ax=axes[filt_idx, 0], fraction=0.05)
+        axes[filt_idx, 0].set_title(f'SSD transform dim. #{filt_idx}')
 
         session_alpha = dict()
 
@@ -96,10 +100,11 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=3):
             raw_filtered_psds, freqs = psd_array_multitaper(
                 data_epochs,
                 raw_filtered.info['sfreq'],
-                fmin=1., fmax=50.
+                fmin=5., fmax=50.
                 )
 
-            alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
+            # alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
+            alpha_mask = np.logical_and(freqs >= 15, freqs <= 29)  # beta
             alpha_mean_pow = raw_filtered_psds[:, alpha_mask].mean(axis=1)
             # alpha_max_mean = np.mean(alpha_max)
             # alpha_max_std = np.std(alpha_max)
@@ -126,6 +131,9 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
     fig_spec_ratios, axes = plt.subplots(1, 2)
     colors = ['grey', 'orange']
 
+    # store first 100 spec_ratios for each session
+    spec_ratios_100 = np.zeros((2, 100))
+
     data_agg = np.stack([raw_filtered.get_data() for raw_filtered
                          in raw_sessions_filtered], axis=0)
     spec_ratio_agg, _ = ssd.get_spectral_ratio(data_agg)
@@ -134,6 +142,8 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
         data = raw_filtered.get_data()
         spec_ratios_sess, _ = ssd.get_spectral_ratio(data)
         spec_ratios_diff = spec_ratios_sess - spec_ratio_agg
+
+        spec_ratios_100[sess_idx, :] = spec_ratios_sess[:100]
 
         df = len(spec_ratios_diff) - 1
         loc = spec_ratios_diff.mean()
@@ -163,13 +173,17 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
     axes[0].legend()
     axes[0].axhline(1, color='k', linestyle=':')
 
-    return fig_spec_ratios
+    spec_ratios_diff = spec_ratios_100[1, :] - spec_ratios_100[0, :]
+
+    return fig_spec_ratios, spec_ratios_diff
 
 
 def fit_ssd(data, info):
     """Alpha-band Spatio-Spectral Decomposition (SSD) from raw data"""
-    freqs_sig = 9, 14
-    freqs_noise = 8, 15
+    # freqs_sig = 9, 14  # alpha
+    # freqs_noise = 8, 15  # alpha
+    freqs_sig = 15, 29  # beta
+    freqs_noise = 14, 30  # beta
 
     ssd = SSD(info=info,
               reg='oas',
@@ -192,7 +206,7 @@ def analysis(subj_id):
     alpha_sess = list()
     session_fnames = sorted(glob(op.join(data_dir, subj_id + '*')))
 
-    fig_alpha_topo, axes = plt.subplots(1, 4)
+    fig_alpha_topo, axes = plt.subplots(1, 4, constrained_layout=True)
     colors = ['grey', 'orange']
 
     for session_idx, fname in enumerate(session_fnames):
@@ -200,7 +214,7 @@ def analysis(subj_id):
         raw.load_data()
         add_bad_labels(raw, subj_id)  # modifies Raw object in-place
         raw.pick_types(meg=True, eeg=False, ref_meg=False)
-        raw.filter(l_freq=1., h_freq=50)
+        raw.filter(l_freq=5., h_freq=50)
         # raw._data = zscore(raw._data, axis=1)
         raw._data -= raw._data.mean()
         raw._data /= raw._data.std()
@@ -209,27 +223,28 @@ def analysis(subj_id):
         # compute raw PSD
         raw_psds, freqs = psd_array_multitaper(raw.get_data(),
                                                raw.info['sfreq'],
-                                               fmin=1., fmax=50.)
+                                               fmin=3., fmax=50.)
         # plot channel-mean psd
         chan_avg_psd = raw_psds.mean(axis=0)
         axes[0].plot(freqs, np.log(chan_avg_psd), color=colors[session_idx], alpha=0.8)
         axes[0].set_ylabel('log power')
         axes[0].set_xlabel('freq. (Hz)')
         # plot alpha topography
-        alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
+        # alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
+        alpha_mask = np.logical_and(freqs >= 15, freqs <= 29)  # beta
         avg_alpha_pow = raw_psds[:, alpha_mask].mean(axis=1)
-        im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=80,
+        im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=20,
                              axes=axes[session_idx + 1],
                              show=False)
-        plt.colorbar(im, ax=axes[session_idx + 1])
 
         alpha_sess.append(avg_alpha_pow)
         raw_sessions.append(raw)
-    
+    plt.colorbar(im, ax=axes[1:3], fraction=0.05, shrink=0.5)
+
     # plot alpha topography diff between sessions
     alpha_sess_diff = alpha_sess[1] - alpha_sess[0]
     im, _ = plot_topomap(alpha_sess_diff, raw.info, axes=axes[3], show=False)
-    plt.colorbar(im, ax=axes[3])
+    plt.colorbar(im, ax=axes[3], shrink=0.5)
 
     # concatenate data and compute a single SSD filter that is applied to both
     # sessions
@@ -241,15 +256,16 @@ def analysis(subj_id):
     for session_idx, raw_filtered in enumerate(raw_sessions_filtered):
         raw_filtered._data = filtered_data[session_idx].copy()
 
-    fig_spec_ratios = ssd_spec_ratios(raw_sessions_filtered, ssd)
     fig_ssd, sessions_alpha = ssd_alpha(raw_sessions_filtered, ssd)
+    fig_spec_ratios, spec_ratios_diff = ssd_spec_ratios(raw_sessions_filtered, ssd)
 
-    return fig_alpha_topo, fig_ssd, sessions_alpha, fig_spec_ratios, subj_id
+    return (fig_alpha_topo, alpha_sess_diff.mean(), fig_ssd, sessions_alpha,
+            fig_spec_ratios, spec_ratios_diff, subj_id)
 
 
 if __name__ == '__main__':
     n_jobs = 5
-    n_subjs = 5
+    n_subjs = 36
 
     data_dir = '/home/ryan/Documents/datasets/MDD_ketamine_2022'
     # data_dir = '/Volumes/THORPE/MDD_ketamine_2022'
@@ -259,14 +275,34 @@ if __name__ == '__main__':
     subj_ids = subj_ids[:n_subjs]
     # subj_ids = ['RASMDGZN']
 
-    out = Parallel(n_jobs=n_jobs)(delayed(analysis)(subj_id) for subj_id
-                                  in subj_ids)
-    # fig_alpha_topo_list, fig_ssd_list, sessions_alpha_list = zip(*out)
+    out = Parallel(n_jobs=n_jobs)(delayed(analysis)(subj_id)
+                                  for subj_id in subj_ids)
 
     report = Report()
-    for fig_alpha_topo, fig_ssd, _, fig_spec_ratios, subj_id in out:
+    for (fig_alpha_topo, _, fig_ssd, _, fig_spec_ratios, _, subj_id) in out:
         report.add_figure(fig_alpha_topo, title=subj_id, tags=('topo',))
         report.add_figure(fig_ssd, title=subj_id, tags=('ssd_psd',))
         report.add_figure(fig_spec_ratios, title=subj_id,
                           tags=('spec_ratios',))
+
+    _, alpha_sess_diffs, _, _, _, spec_ratios_diffs, _ = zip(*out)
+
+    fig_summary, axes = plt.subplots(1, 2, figsize=(7, 3),
+                                     constrained_layout=True)
+    sns.kdeplot(data=alpha_sess_diffs, bw_adjust=0.5, ax=axes[0])
+    sns.rugplot(data=alpha_sess_diffs, ax=axes[0])
+    axes[0].axvline(0, color='k', linestyle=':')
+    axes[0].set_xlabel('mean alpha power (session 2 - session 1)')
+
+    x = np.stack(spec_ratios_diffs, axis=0)
+    pca = PCA(n_components=x.shape[0])
+    x_pca = pca.fit_transform(x)
+    sns.scatterplot(x=x_pca[:, 0], y=x_pca[:, 1], hue=alpha_sess_diffs,
+                    hue_norm=(-1, 1), palette='Spectral', ax=axes[1])
+    # axes[1].scatter(x_pca[:, 0], x_pca[:, 1], marker='.')
+    axes[1].set_xlabel('PC_1 eigenvector')
+    axes[1].set_ylabel('PC_2 eigenvector')
+    # ax.set_zlabel('PC_3 eigenvector')
+    report.add_figure(fig_summary, title='summary')
+
     report.save('alpha_analysis.html', overwrite=True, open_browser=True)
