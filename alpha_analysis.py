@@ -103,8 +103,7 @@ def ssd_alpha(raw_sessions_filtered, ssd, num_filters=3):
                 fmin=3., fmax=55.
                 )
 
-            # alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
-            alpha_mask = np.logical_and(freqs >= 35, freqs <= 45)  # gamma
+            alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
             alpha_mean_pow = raw_filtered_psds[:, alpha_mask].mean(axis=1)
             # alpha_max_mean = np.mean(alpha_max)
             # alpha_max_std = np.std(alpha_max)
@@ -180,12 +179,12 @@ def ssd_spec_ratios(raw_sessions_filtered, ssd):
 
 def fit_ssd(data, info):
     """Alpha-band Spatio-Spectral Decomposition (SSD) from raw data"""
-    # freqs_sig = 9, 14  # alpha
-    # freqs_noise = 8, 15  # alpha
+    freqs_sig = 9, 14  # alpha
+    freqs_noise = 8, 15  # alpha
     # freqs_sig = 15, 29  # beta
     # freqs_noise = 14, 30  # beta
-    freqs_sig = 35, 45  # gamma
-    freqs_noise = 30, 50  # gamma
+    # freqs_sig = 35, 45  # gamma
+    # freqs_noise = 30, 50  # gamma
 
     ssd = SSD(info=info,
               reg='oas',
@@ -232,10 +231,9 @@ def analysis(subj_id):
         axes[0].set_ylabel('log power')
         axes[0].set_xlabel('freq. (Hz)')
         # plot alpha topography
-        # alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
-        alpha_mask = np.logical_and(freqs >= 35, freqs <= 45)  # gamma
+        alpha_mask = np.logical_and(freqs >= 9, freqs <= 14)
         avg_alpha_pow = raw_psds[:, alpha_mask].mean(axis=1)
-        im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=20,
+        im, _ = plot_topomap(avg_alpha_pow, raw.info, vmax=70,
                              axes=axes[session_idx + 1],
                              show=False)
 
@@ -267,7 +265,7 @@ def analysis(subj_id):
 
 if __name__ == '__main__':
     n_jobs = 5
-    n_subjs = 36
+    n_subjs = 5
 
     data_dir = '/home/ryan/Documents/datasets/MDD_ketamine_2022'
     # data_dir = '/Volumes/THORPE/MDD_ketamine_2022'
