@@ -3,7 +3,7 @@ import os.path as op
 from glob import glob
 
 import numpy as np
-from scipy.stats import zscore, norm, chi2
+from scipy.stats import zscore
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
@@ -94,6 +94,7 @@ def analysis(subj_id):
         im, _ = plot_topomap(ssd.patterns_[0], ssd.info, axes=axes[sess_idx],
                              vmin=-.1, vmax=.1, show=False)
         plt.colorbar(im, ax=axes[sess_idx], fraction=0.05)
+        axes[sess_idx].set_title(f'session {sess_idx}')
         ssd_weights.append(ssd.patterns_[0])
 
     ssd_std_diff = ssd_weights[1].std() - ssd_weights[0].std()
@@ -136,23 +137,29 @@ if __name__ == '__main__':
     labels = DBSCAN(eps=0.7, min_samples=10).fit_predict(X)
 
     g = sns.JointGrid()
-    sns.scatterplot(x=ssd_std_diffs, y=ssd_norms, s=50, alpha=.8,
-                    ax=g.ax_joint, label='agg')
-    sns.kdeplot(x=ssd_std_diffs, bw_adjust=.6, ax=g.ax_marg_x)
-    sns.kdeplot(y=ssd_norms, bw_adjust=.6, ax=g.ax_marg_y)
-    for class_ in set(labels):
+    sns.kdeplot(x=ssd_std_diffs, bw_adjust=0.85, fill=True, linewidth=0,
+                alpha=.5, color='C0', ax=g.ax_marg_x, label='agg')
+    sns.kdeplot(y=ssd_norms, bw_adjust=0.85, fill=True, linewidth=0, alpha=.5,
+                color='C0', ax=g.ax_marg_y)
+    for class_idx, class_ in enumerate(set(labels)):
         if class_ == -1:
-            label = 'outlier'
+            label = 'outliers'
+            edgecolor = None
         else:
-            label = f'class {class_}'
+            label = 'cluster'
+            edgecolor = 'k'
         cluster_mask = labels == class_
         x = np.array(ssd_std_diffs)[cluster_mask]
         y = np.array(ssd_norms)[cluster_mask]
-        sns.scatterplot(x=x, y=y, s=20, alpha=.8, ax=g.ax_joint, label=label)
-        sns.kdeplot(x=x, bw_adjust=.6, ax=g.ax_marg_x)
-        sns.kdeplot(y=y, bw_adjust=.6, ax=g.ax_marg_y)
+        sns.scatterplot(x=x, y=y, alpha=.5, edgecolor=edgecolor,
+                        color=f'C{class_idx + 1}', ax=g.ax_joint)
+        sns.kdeplot(x=x, bw_adjust=0.85, fill=True, linewidth=0, alpha=.5,
+                    color=f'C{class_idx + 1}', ax=g.ax_marg_x, label=label)
+        sns.kdeplot(y=y, bw_adjust=0.85, fill=True, linewidth=0, alpha=.5,
+                    color=f'C{class_idx + 1}', ax=g.ax_marg_y)
     g.ax_joint.set_xlabel(r'$std(W_{sess_2})-std(W_{sess_1})$')
     g.ax_joint.set_ylabel(r'$\parallel W_{sess_2}-W_{sess_1}\parallel$')
+    g.ax_marg_x.legend(loc='lower center', ncol=3, bbox_to_anchor=(0.5, 1.02))
     g.fig.tight_layout()
 
     report = Report()
