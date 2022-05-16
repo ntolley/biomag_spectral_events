@@ -94,7 +94,7 @@ def analysis(subj_id):
         im, _ = plot_topomap(ssd.patterns_[0], ssd.info, axes=axes[sess_idx],
                              vmin=-.1, vmax=.1, show=False)
         plt.colorbar(im, ax=axes[sess_idx], fraction=0.05)
-        axes[sess_idx].set_title(f'session {sess_idx}')
+        axes[sess_idx].set_title(f'session {sess_idx + 1}')
         ssd_weights.append(ssd.patterns_[0])
 
     ssd_std_diff = ssd_weights[1].std() - ssd_weights[0].std()
@@ -135,6 +135,10 @@ if __name__ == '__main__':
     X = np.stack([ssd_std_diffs, ssd_norms], axis=1)
     X = StandardScaler().fit_transform(X)
     labels = DBSCAN(eps=0.7, min_samples=10).fit_predict(X)
+    clustered_subj_ids = np.array(subj_ids)[labels == 0]
+    unclustered_subj_ids = np.array(subj_ids)[labels == -1]
+    print(f'clustered subjects: {clustered_subj_ids}')
+    print(f'outlier subjects: {unclustered_subj_ids}')
 
     g = sns.JointGrid()
     sns.kdeplot(x=ssd_std_diffs, bw_adjust=0.85, fill=True, linewidth=0,
@@ -148,6 +152,7 @@ if __name__ == '__main__':
         else:
             label = 'cluster'
             edgecolor = 'k'
+        subj_class_ids = np.array(subj_ids)[labels == class_]
         cluster_mask = labels == class_
         x = np.array(ssd_std_diffs)[cluster_mask]
         y = np.array(ssd_norms)[cluster_mask]
@@ -157,6 +162,9 @@ if __name__ == '__main__':
                     color=f'C{class_idx + 1}', ax=g.ax_marg_x, label=label)
         sns.kdeplot(y=y, bw_adjust=0.85, fill=True, linewidth=0, alpha=.5,
                     color=f'C{class_idx + 1}', ax=g.ax_marg_y)
+        for x_coord, y_coord, subj_id in zip(x, y, subj_class_ids):
+            g.ax_joint.text(x_coord + 0.002, y_coord, subj_id[:3], fontsize=5,
+                            va='center_baseline')
     g.ax_joint.set_xlabel(r'$std(W_{sess_2})-std(W_{sess_1})$')
     g.ax_joint.set_ylabel(r'$\parallel W_{sess_2}-W_{sess_1}\parallel$')
     g.ax_marg_x.legend(loc='lower center', ncol=3, bbox_to_anchor=(0.5, 1.02))
@@ -164,6 +172,8 @@ if __name__ == '__main__':
 
     report = Report()
     report.add_figure(g.fig, title='summary')
+    report.add_code(str(clustered_subj_ids), 'clustered subjects (class 0)')
+    report.add_code(str(unclustered_subj_ids), 'outlier subjects (class -1)')
 
     for (fig_alpha_ssd, _, _, subj_id) in out:
         report.add_figure(fig_alpha_ssd, title=subj_id, tags=('ssd_topo',))
