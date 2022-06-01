@@ -14,16 +14,19 @@ subj_id, session_idx = 'ZDIAXRUW', 0
 
 
 bads = dict(
-    DXFTLCJA=[[], ['MRT35-1609', 'MRT15-1609', 'MRP57-1609', 'MRP56-1609',
-                   'MRP23-1609', 'MRP22-1609', 'MRO24-1609', 'MLF67-1609',
-                   'MLF66-1609', 'MRP34-1609', 'MLT14-1609']],
-    BQBBKEBX=[[], ['MRT21-1609', 'MLT31-1609', 'MLT41-1609', 'MLT51-1609',
-                   'MLT21-1609', 'MLT16-1609', 'MLT11-1609', 'MLT22-1609',
-                   'MLT12-1609', 'MLT32-1609', 'MLT33-1609', 'MLT42-1609',
-                   'MLT43-1609', 'MRF14-1609', 'MRT34-1609', 'MRT27-1609']],
+    DXFTLCJA=[[], ['MLF67-1609', 'MLF66-1609', 'MLT14-1609', 'MRO24-1609',
+                   'MRP23-1609', 'MRP22-1609', 'MRP34-1609', 'MRT35-1609',
+                   'MRT15-1609', 'MRP57-1609', 'MRP56-1609', 'MRO14-1609',
+                   'MLT44-1609', 'MRO34-1609']],
+    BQBBKEBX=[[], ['MLF67-1609', 'MLF66-1609', 'MLT14-1609', 'MRO24-1609',
+                   'MRP23-1609', 'MRP22-1609', 'MRP34-1609', 'MRT35-1609',
+                   'MRT15-1609', 'MRP57-1609', 'MRP56-1609', 'MRO14-1609',
+                   'MLT44-1609']],
     JBGAZIEO=[[], ['MLF25-1609']],
     QGFMDSZY=[['MLP41-1609'], []],
-    ZDIAXRUW=[[], []]
+    ZDIAXRUW=[['MRF61-1609', 'MRC62-1609', 'MRC15-1609', 'MRO41-1609',
+               'MRO53-1609', 'MRT41-1609', 'MRT42-1609', 'MRT43-1609'],
+              ['MRC55-1609']]
 )
 
 session_fnames = sorted(glob(op.join(data_dir, subj_id + '*')))
